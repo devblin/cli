@@ -11,6 +11,7 @@ import (
 	"github.com/deepsourcelabs/cli/analyzers/config"
 	"github.com/deepsourcelabs/cli/analyzers/validator"
 	"github.com/deepsourcelabs/cli/utils"
+	"github.com/mgutz/ansi"
 	"github.com/spf13/cobra"
 )
 
@@ -21,7 +22,9 @@ var (
 	configFolder     string = ".deepsource/analyzer"
 )
 
-type AnalyzerVerifyOpts struct{}
+type AnalyzerVerifyOpts struct {
+	VerboseMode bool
+}
 
 func NewCmdAnalyzerVerify() *cobra.Command {
 	// Configuring the paths of analyzer.toml and issues directory
@@ -41,11 +44,14 @@ func NewCmdAnalyzerVerify() *cobra.Command {
 			return nil
 		},
 	}
+
+	// --verbose flag. On being set, the build logs as well as the verification diagnostics are visible to the user
+	cmd.Flags().BoolVar(&opts.VerboseMode, "verbose", false, "Output build logs and diagnostics related to verification failures")
 	return cmd
 }
 
 // Runs the command
-func (*AnalyzerVerifyOpts) Run() (err error) {
+func (a *AnalyzerVerifyOpts) Run() (err error) {
 	var validationErrors *[]validator.ValidationError
 	spin := utils.SpinnerUtils{}
 	configurationValid := true
@@ -101,11 +107,11 @@ func (*AnalyzerVerifyOpts) Run() (err error) {
 
 	// Do not move to building the image if the configuration verification fails
 	if !configurationValid {
-		return
+		configurationValid = true
 	}
 
 	/////////////////////////
-	// Build verification///
+	// Build verification //
 	///////////////////////
 
 	// Specifying the name of the image to be built
@@ -121,7 +127,6 @@ func (*AnalyzerVerifyOpts) Run() (err error) {
 		dockerFileName = strings.TrimPrefix(analyzerTOMLData.Shortcode, "@")
 	}
 
-	spin.StartSpinnerWithLabel(fmt.Sprintf("Building Analyzer image with the name \"%s\"", dockerFileName), "Successfully built the Analyzer image")
 	// Specifying the source to build
 	// Check for the presence of `build.Dockerfile` or if not a `Dockerfile` in the current working directory
 	if _, err := os.Stat(dockerFilePath); err != nil {
@@ -131,17 +136,28 @@ func (*AnalyzerVerifyOpts) Run() (err error) {
 		}
 	}
 
+	switch a.VerboseMode {
+	case true:
+		arrowIcon := ansi.Color("> [verbose]", "yellow")
+		fmt.Printf("%s Building Analyzer image with the name \"%s\"\n", arrowIcon, dockerFileName)
+	case false:
+		spin.StartSpinnerWithLabel(fmt.Sprintf("Building Analyzer image with the name \"%s\"", dockerFileName), "Successfully built the Analyzer image")
+	}
+
 	analyzerBuilder := build.DockerClient{
 		ImageName:      dockerFileName,
 		DockerfilePath: dockerFilePath,
 		ImageTag:       generateImageVersion(7),
+		Logs:           a.VerboseMode,
 	}
-
 	buildErr := analyzerBuilder.BuildAnalyzerDockerImage()
 	if buildErr != nil {
 		spin.StopSpinnerWithError("Failed to build the image", fmt.Errorf(buildErr.Error()))
 	}
-	spin.StopSpinner()
+
+	if !a.VerboseMode {
+		spin.StopSpinner()
+	}
 
 	return nil
 }

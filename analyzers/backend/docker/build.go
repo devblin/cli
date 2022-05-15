@@ -34,6 +34,7 @@ type DockerClient struct {
 	ImageName      string
 	ImageTag       string
 	DockerfilePath string
+	Logs           bool
 }
 
 type DockerBuildError struct {
@@ -85,10 +86,10 @@ func (d *DockerClient) executeImageBuild() error {
 		return err
 	}
 	defer res.Body.Close()
-	return checkResponse(res.Body)
+	return checkResponse(res.Body, d.Logs)
 }
 
-func checkResponse(rd io.Reader) error {
+func checkResponse(rd io.Reader, showAllLogs bool) error {
 	var lastLine []byte
 	count := 0
 	var currentStream string
@@ -101,10 +102,13 @@ func checkResponse(rd io.Reader) error {
 		if err != nil {
 			return err
 		}
-		if d.Stream == "" || d.Stream == "\n" || strings.TrimSuffix(d.Stream, "\n") == currentStream {
+		if d.Stream == "" || d.Stream == "\n" || strings.Contains(d.Stream, "--->") || strings.TrimSuffix(d.Stream, "\n") == currentStream {
 			continue
 		}
 		currentStream = strings.TrimSuffix(d.Stream, "\n")
+		if showAllLogs {
+			fmt.Println(currentStream)
+		}
 		count++
 	}
 
