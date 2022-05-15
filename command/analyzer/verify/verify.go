@@ -107,7 +107,7 @@ func (a *AnalyzerVerifyOpts) Run() (err error) {
 
 	// Do not move to building the image if the configuration verification fails
 	if !configurationValid {
-    return
+		return
 	}
 
 	/////////////////////////
